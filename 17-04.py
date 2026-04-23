@@ -12,7 +12,7 @@ L = 1   #inductance [H]
 
 dE = lambda t: 0.2*np.sin(2.5*t)    #function of the derivative of the electrical field
 
-to_run = 'solution'     # string to chance to run different parts of the code: 
+to_run = 'consistency'     # string to chance to run different parts of the code: 
 # 'solution' compares different methods for solving the ivp problem
 # 'consistency' implements the consistency study
 
