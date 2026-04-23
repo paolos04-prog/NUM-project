@@ -74,7 +74,7 @@ plt.xlabel('t(s)')
 plt.ylabel('i(A)')
 plt.title('current with one-step methods for time step:' + str(dt) +'s')
 plt.grid(True)
-plt.show()
+#plt.show()
 
 
 ## ---------------------------------------------------------------------- ##
@@ -109,4 +109,13 @@ plt.xlabel('t(s)')
 plt.ylabel('i(A)')
 plt.title('current with verlet method for time step:' + str(dt) +'s')
 plt.grid(True)
-plt.show()
+#plt.show()
+
+## ---------------------------------------------------------------------- ##
+## CONSISTENCY STUDY
+
+# In this part of the code some a consistency study is developed
+# To do the stability study, we evaluate the relative error
+# In order to do that we consider the analytical solution as the one obtained with the CN method (the most stable and precise) with a very small deltat (say with 1000 nodes ==- t=0.005s)
+
+## ---------------------------------------------------------------------- ##
