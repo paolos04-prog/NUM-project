@@ -1,0 +1,13 @@
+SAVE CHANGES ----------------------------
+
+git add . --> add the changes to the repository
+git commit -m "name of the commit" --> commit the changes
+git pull --> load in my computer the changes that others have made
+git push --> upload the changes to the online repository so anyone can see it. Remember to git pull first
+
+BRANCHES------------------------------
+
+git branch --> see the branch where i'm working and the name of the other branches
+git checkout name of the branch --> move to another branch
+
+git merge main --> merge my current branch into the main branch
