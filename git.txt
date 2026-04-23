@@ -9,5 +9,6 @@ BRANCHES------------------------------
 
 git branch --> see the branch where i'm working and the name of the other branches
 git checkout name of the branch --> move to another branch
+git merge branch_name --> firt do git checkout main. Then, this comand merges the branch into the main
+git merge origin/main --> if you are in your branch and want to bring the changs of the main into your branch
 
-git merge main --> merge my current branch into the main branch
