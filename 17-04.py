@@ -12,9 +12,10 @@ L = 1   #inductance [H]
 
 dE = lambda t: 0.2*np.sin(2.5*t)    #function of the derivative of the electrical field
 
-to_run = 'consistency'     # string to chance to run different parts of the code: 
+to_run = 'part2'     # string to chance to run different parts of the code: 
 # 'solution' compares different methods for solving the ivp problem
 # 'consistency' implements the consistency study
+# 'part2' to run the part of the code concerning the non-linear problem
 
 ## ---------------------------------------------------------------------- ##
 ## ONE-STEP RESOLUTION METHODS
@@ -125,7 +126,7 @@ match to_run:
         ## ---------------------------------------------------------------------- ##
         ## CONSISTENCY STUDY
 
-        # In this part of the code some a consistency study is developed
+        # In this part of the code a consistency study is developed
         # To do the stability study, we evaluate the relative error
         # In order to do that we consider the reference solution as the one obtained with the CN method (the most stable and precise) with a very small deltat (say with 1000 nodes ==- t=0.005s)
         # We will compare the current at 5s (i.e. the last value of the vector containing the currents)
@@ -177,4 +178,102 @@ match to_run:
         plt.ylabel('Relative error')
         plt.title('Consistency study')
         plt.grid(True, which = 'both')
+        plt.show()
+
+    case 'part2':
+        ## ---------------------------------------------------------------------- ##
+        ## SECOND PART, NON LINEAR PROBLEM
+
+        # In this part of the code the second part of the problem is developed
+        # This consists in studying a more realistic version of the problem, described by a non-linear equation
+        # The problem will be tackled with different strategies: firstly with a fully explicit scheme, then with some implicit schemes (with different initialization approaches)
+
+        ## ---------------------------------------------------------------------- ##
+
+        ## FULLY EXPLICIT - EXPLICIT EULER SCHEME
+
+        def B2(x,F):    #function F(t,x(t)) for the new non-linear problem
+            y = x[0]
+            yp = x[1]
+            return np.array([yp, -2*1e4*(y*yp)- 400*y + F])
+        
+        def EE2(x0, nodes):
+            # nodes: number of points in which to evaluate i 
+       
+            time = np.linspace(0,5,nodes)   #vector of time
+            dt = time[1]-time[0]    #increment step
+            x = np.zeros((2, nodes))    
+            x[:,0] = x0
+            
+            for i in range(1, nodes):
+                x[:,i] = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))
+
+            return x, time
+        
+        def CN2(x0, nodes):     #implementing the crank-nicolson scheme (implicit) with two different strategies: explicit method initialization or fixed-point/NR iterations
+            # nodes: number of points in which to evaluate i 
+       
+            time = np.linspace(0,5,nodes)   #vector of time
+            dt = time[1]-time[0]    #increment step
+            x = np.zeros((2, nodes))    
+            x[:,0] = x0
+
+            for i in range(1, nodes):
+                guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
+                x[:,i] = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   #corrector step
+
+            return x
+        
+        def CN2i(x0, nodes, tol):    #fixed point iterations with while loop, tolerance
+            # nodes: number of points in which to evaluate i 
+       
+            time = np.linspace(0,5,nodes)   #vector of time
+            dt = time[1]-time[0]    #increment step
+            x = np.zeros((2, nodes))    
+            x[:,0] = x0
+            nmax = 0
+
+            for i in range(1, nodes):
+                
+                n = 0
+                guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
+                guessk = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   #corrector step
+                err = np.linalg.norm(guess-guessk)
+
+                while err > tol:        #fixed point iterations
+                    guess = guessk
+                    guessk = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   
+                    err = np.linalg.norm(guess-guessk)
+                    n = n+1
+                
+                x[:,i] = guessk
+
+                if n > nmax:
+                    nmax = n
+            
+            print('fixed point iterations with maximum number of iterations: ', nmax)
+            return x
+
+        y_ee2, time = EE2(y0, 250)
+        y_cne = CN2(y0, 250)
+        y_cnfp = CN2i(y0, 250, 1e-3)
+        dt = time[1] - time[0]
+        
+        plt.figure()
+        
+        #EE
+        plt.subplot(2,2,1)
+        plt.plot(time, y_ee2[0])
+        plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('Explicit Euler, (dt= ' +str(dt) + 's)'); plt.grid(True)
+        
+        #CN with EE guess
+        plt.subplot(2,2,2)
+        plt.plot(time, y_cne[0])
+        plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE guess, (dt=' +str(dt) + 's)'); plt.grid(True)
+        
+        #CN with EE initial guess, fixed point iterations
+        plt.subplot(2,2,3)
+        plt.plot(time, y_cnfp[0])
+        plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and FP iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
+
         plt.show()
