@@ -224,7 +224,7 @@ match to_run:
 
             return x
         
-        def CN2i(x0, nodes, tol):    #fixed point iterations with while loop, tolerance
+        def CN2fp(x0, nodes, tol):    #fixed point iterations with while loop, tolerance
             # nodes: number of points in which to evaluate i 
        
             time = np.linspace(0,5,nodes)   #vector of time
@@ -253,10 +253,46 @@ match to_run:
             
             print('fixed point iterations with maximum number of iterations: ', nmax)
             return x
+        
+        def CN2nr(x0, nodes, tol):    #newton raphson iterations with while loop, tolerance
+            # nodes: number of points in which to evaluate i 
+       
+            time = np.linspace(0,5,nodes)   #vector of time
+            dt = time[1]-time[0]    #increment step
+            x = np.zeros((2, nodes))    
+            x[:,0] = x0
+            nmax = 0
 
-        y_ee2, time = EE2(y0, 250)
-        y_cne = CN2(y0, 250)
-        y_cnfp = CN2i(y0, 250, 1e-3)
+            for i in range(1, nodes):
+                
+                n = 0
+                guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
+                guessk = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   #corrector step
+                err = np.linalg.norm(guess-guessk)
+
+                while err > tol and n < 100:        #nr iterations
+                    guess = guessk
+                    G =  guess - x[:,i-1] - (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))      #cn function, of which is necessary to compute the jacobian
+                    ik = guess[0]   #current k
+                    ipk = guess[1]  #current' k
+                    jg = np.array([[1, -dt/2], [dt*1e4*ipk+200*dt, 1+dt*1e4*ik]])   #jacobian matrix
+                    deltaguess = np.linalg.solve(jg, -G)    #guessk-guess
+                    guessk = guess + deltaguess     #find the new guessk
+                    err = np.linalg.norm(deltaguess)
+                    n = n+1
+                
+                x[:,i] = guessk
+
+                if n > nmax:
+                    nmax = n
+            
+            print('newton raphson iterations with maximum number of iterations: ', nmax)
+            return x
+
+        y_ee2, time = EE2(y0, 1000)
+        y_cne = CN2(y0, 1000)
+        y_cnfp = CN2fp(y0, 1000, 1e-3)
+        y_cnnr = CN2nr(y0, 1000, 1e-3)
         dt = time[1] - time[0]
         
         plt.figure()
@@ -275,5 +311,10 @@ match to_run:
         plt.subplot(2,2,3)
         plt.plot(time, y_cnfp[0])
         plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and FP iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
+
+        #CN with EE initial guess, newton raphson iterations
+        plt.subplot(2,2,4)
+        plt.plot(time, y_cnnr[0])
+        plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and NR iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
 
         plt.show()
