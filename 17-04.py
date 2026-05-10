@@ -190,6 +190,7 @@ match to_run:
 
         ## ---------------------------------------------------------------------- ##
 
+        to_run2 = 'consistency2'    #mathc-case for the second part. 'solution' to get the sol with different methods; 'consistency' to get the consistency study
         ## FULLY EXPLICIT - EXPLICIT EULER SCHEME
 
         def B2(x,F):    #function F(t,x(t)) for the new non-linear problem
@@ -267,8 +268,9 @@ match to_run:
             for i in range(1, nodes):
                 
                 n = 0
-                guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
+                #guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
                 #guess = x[:,i-1]
+                guess = x[:,i-1] + dt*B2(x[:,i-1]+(dt/2)*B2(x[:,i-1],dE((i-1)*dt)) , dE((i-0.5)*dt))    #rk2 predictor step
                 guessk = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   #corrector step
                 err = np.linalg.norm(guess-guessk)
 
@@ -291,32 +293,84 @@ match to_run:
             print('newton raphson iterations with maximum number of iterations: ', nmax)
             return x
 
-        y_ee2, time = EE2(y0, 200)
-        y_cne = CN2(y0, 200)
-        y_cnfp = CN2fp(y0, 200, 1e-5)
-        y_cnnr = CN2nr(y0, 200, 1e-5)
-        dt = time[1] - time[0]
-        
-        plt.figure()
-        
-        #EE
-        plt.subplot(2,2,1)
-        plt.plot(time, y_ee2[0])
-        plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('Explicit Euler, (dt= ' +str(dt) + 's)'); plt.grid(True)
-        
-        #CN with EE guess
-        plt.subplot(2,2,2)
-        plt.plot(time, y_cne[0])
-        plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE guess, (dt=' +str(dt) + 's)'); plt.grid(True)
-        
-        #CN with EE initial guess, fixed point iterations
-        plt.subplot(2,2,3)
-        plt.plot(time, y_cnfp[0])
-        plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and FP iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
+        match to_run2:
+            
+            case 'solution':
+                y_ee2, time = EE2(y0, 200)
+                y_cne = CN2(y0, 200)
+                y_cnfp = CN2fp(y0, 200, 1e-5)
+                y_cnnr = CN2nr(y0, 200, 1e-5)
+                dt = time[1] - time[0]
+                
+                plt.figure()
+                
+                #EE
+                plt.subplot(2,2,1)
+                plt.plot(time, y_ee2[0])
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('Explicit Euler, (dt= ' +str(dt) + 's)'); plt.grid(True)
+                
+                #CN with EE guess
+                plt.subplot(2,2,2)
+                plt.plot(time, y_cne[0])
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE guess, (dt=' +str(dt) + 's)'); plt.grid(True)
+                
+                #CN with EE initial guess, fixed point iterations
+                plt.subplot(2,2,3)
+                plt.plot(time, y_cnfp[0])
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and FP iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
 
-        #CN with EE initial guess, newton raphson iterations
-        plt.subplot(2,2,4)
-        plt.plot(time, y_cnnr[0])
-        plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and NR iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
+                #CN with EE initial guess, newton raphson iterations
+                plt.subplot(2,2,4)
+                plt.plot(time, y_cnnr[0])
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and NR iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
 
-        plt.show()
+                plt.show()
+
+            case 'consistency2':
+
+                tolerance = 1e-5
+                ex_sol = CN2nr(y0, 50000, tolerance)[0][-1]     #getting the 'exact' solution
+                deltastep = np.linspace(1000, 40000, 40)      #vector containing nodes starting from 1k nodes to 40k nodes
+                deltastept = np.zeros(len(deltastep))           #vector containing time steps deriving from the choosen nodes
+                rerr_ee = np.zeros(len(deltastep))
+                rerr_cne = np.zeros(len(deltastep))
+                rerr_cnfp = np.zeros(len(deltastep))
+                rerr_cnnr = np.zeros(len(deltastep))
+                
+                def cons(x0, n, tol):
+                    y_ee2 = EE2(x0, n)
+                    y_cne = CN2(x0, n)
+                    y_cnfp = CN2fp(x0, n, tol)
+                    y_cnnr = CN2nr(x0, n, tol)
+
+                    error_ee = np.abs((y_ee2[0][0,-1]-ex_sol)/ex_sol)
+                    error_cne = np.abs((y_cne[0][-1]-ex_sol)/ex_sol)
+                    error_cnfp = np.abs((y_cnfp[0][-1]-ex_sol)/ex_sol)
+                    error_cnnr = np.abs((y_cnnr[0][-1]-ex_sol)/ex_sol)
+
+                    return error_ee, error_cne, error_cnfp, error_cnnr
+                
+                for i in range(len(deltastep)):
+                    rerr_ee[i], rerr_cne[i], rerr_cnfp[i], rerr_cnnr[i] = cons(y0, int(deltastep[i]), tolerance)
+                    deltastept[i] = 5/deltastep[i]
+                
+                ## PLOTS
+                
+                # ORDER OF CONVERGENCE ESTIMATION
+
+                p_ee = np.polyfit(np.log(deltastept),np.log(rerr_ee),1)
+                p_cne = np.polyfit(np.log(deltastept),np.log(rerr_cne),1)
+                p_cnfp = np.polyfit(np.log(deltastept),np.log(rerr_cnfp),1)
+                p_cnnr = np.polyfit(np.log(deltastept),np.log(rerr_cnnr),1)
+
+                plt.figure(figsize=(12,9))
+                plt.loglog(deltastept, rerr_ee, label = 'EE, p = ' + str(p_ee[0]))
+                plt.loglog(deltastept, rerr_cne, label = 'CN with EE initial guess, p = ' + str(p_cne[0]))
+                plt.loglog(deltastept, rerr_cnfp, label = 'CN with EE initial guess, fp iterations, p = ' + str(p_cnfp[0]))
+                plt.loglog(deltastept, rerr_cnnr, label = 'CN with RK2 initial guess, nr iterations, p = ' + str(p_cnnr[0]))
+                plt.legend(loc='best')
+                plt.xlabel('Deltat (s) ', fontweight = 'bold')
+                plt.ylabel('Relative error', fontweight = 'bold')
+                plt.title('Evolution of relative error with different methods')
+                plt.grid(True, which = 'both')
+                plt.show()
