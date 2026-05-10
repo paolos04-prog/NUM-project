@@ -195,7 +195,7 @@ match to_run:
         def B2(x,F):    #function F(t,x(t)) for the new non-linear problem
             y = x[0]
             yp = x[1]
-            return np.array([yp, -2*1e4*(y*yp)- 400*y + F])
+            return np.array([yp, -2*1e4*(np.abs(y)*yp)- 400*y + F])
         
         def EE2(x0, nodes):
             # nodes: number of points in which to evaluate i 
@@ -220,6 +220,7 @@ match to_run:
 
             for i in range(1, nodes):
                 guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
+                #guess = x[:,i-1] + dt*B2(x[:,i-1]+(dt/2)*B2(x[:,i-1],dE((i-1)*dt)) , dE((i-0.5)*dt))    #rk2 predictor step
                 x[:,i] = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   #corrector step
 
             return x
@@ -267,6 +268,7 @@ match to_run:
                 
                 n = 0
                 guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
+                #guess = x[:,i-1]
                 guessk = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   #corrector step
                 err = np.linalg.norm(guess-guessk)
 
@@ -275,7 +277,7 @@ match to_run:
                     G =  guess - x[:,i-1] - (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))      #cn function, of which is necessary to compute the jacobian
                     ik = guess[0]   #current k
                     ipk = guess[1]  #current' k
-                    jg = np.array([[1, -dt/2], [dt*1e4*ipk+200*dt, 1+dt*1e4*ik]])   #jacobian matrix
+                    jg = np.array([[1, -dt/2], [dt*1e4*ipk+200*dt, 1+dt*1e4*np.abs(ik)]])   #jacobian matrix
                     deltaguess = np.linalg.solve(jg, -G)    #guessk-guess
                     guessk = guess + deltaguess     #find the new guessk
                     err = np.linalg.norm(deltaguess)
@@ -289,10 +291,10 @@ match to_run:
             print('newton raphson iterations with maximum number of iterations: ', nmax)
             return x
 
-        y_ee2, time = EE2(y0, 1000)
-        y_cne = CN2(y0, 1000)
-        y_cnfp = CN2fp(y0, 1000, 1e-3)
-        y_cnnr = CN2nr(y0, 1000, 1e-3)
+        y_ee2, time = EE2(y0, 200)
+        y_cne = CN2(y0, 200)
+        y_cnfp = CN2fp(y0, 200, 1e-5)
+        y_cnnr = CN2nr(y0, 200, 1e-5)
         dt = time[1] - time[0]
         
         plt.figure()
