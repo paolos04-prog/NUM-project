@@ -10,6 +10,9 @@ R = 10  #resistance [ohm]
 C = 0.0025 #capacitance [F]
 L = 1   #inductance [H]
 
+approxdt = 0.05    #approximate time step to insert by hand
+nd = round(5/approxdt)  #nodes (int) corresponding to approxdt
+
 dE = lambda t: 0.2*np.sin(2.5*t)    #function of the derivative of the electrical field
 
 to_run = 'solution'     # string to chance to run different parts of the code: 
@@ -32,7 +35,8 @@ I2 = np.eye(2)
 
 ## EXPLICIT EULER
 def EE(x0, nodes):
-    # nodes: number of points in which to evaluate i  
+    # nodes: number of points in which to evaluate i 
+    # REMARK: for this method, the stability radius (easily also to calculate by hand) is dt = 0.025s, that corresponds to 200 nodes
 
     time = np.linspace(0,5,nodes)   #vector of time
     dt = time[1]-time[0]    #increment step
@@ -103,10 +107,10 @@ def verlet(x0, nodes):
 match to_run:
 
     case 'solution':
-        y_ee, C_ee, time = EE(y0,250)
-        y_rk2, C_rks = RK2(y0,250)
-        y_cn, C_cn = CN(y0,250)
-        i_ver, ip_ver = verlet(y0, 250)
+        y_ee, C_ee, time = EE(y0,nd)       #200 is the number of nodes for which EE is stable, hence also all the other schemes are stable, since they have a stab radius greater than EE
+        y_rk2, C_rks = RK2(y0,nd)
+        y_cn, C_cn = CN(y0,nd)
+        i_ver, ip_ver = verlet(y0, nd)
         dt = time[1]-time[0]
 
         ## PLOTS OF i WITH THE DIFFERENT METHODS ##
@@ -190,7 +194,7 @@ match to_run:
 
         ## ---------------------------------------------------------------------- ##
 
-        to_run2 = 'consistency2'    #mathc-case for the second part. 'solution' to get the sol with different methods; 'consistency' to get the consistency study
+        to_run2 = 'solution'    #mathc-case for the second part. 'solution' to get the sol with different methods; 'consistency' to get the consistency study
         ## FULLY EXPLICIT - EXPLICIT EULER SCHEME
 
         def B2(x,F):    #function F(t,x(t)) for the new non-linear problem
@@ -211,7 +215,10 @@ match to_run:
 
             return x, time
         
-        def CN2(x0, nodes):     #implementing the crank-nicolson scheme (implicit) with two different strategies: explicit method initialization or fixed-point/NR iterations
+        #REMARK: Now we will implement the crank-nicolson scheme (implicit) with different strategies: 
+        # explicit method initialization (EE/RK2) or fixed-point/NR iterations
+        
+        def CN2(x0, nodes):     
             # nodes: number of points in which to evaluate i 
        
             time = np.linspace(0,5,nodes)   #vector of time
@@ -268,9 +275,9 @@ match to_run:
             for i in range(1, nodes):
                 
                 n = 0
-                #guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
+                guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
                 #guess = x[:,i-1]
-                guess = x[:,i-1] + dt*B2(x[:,i-1]+(dt/2)*B2(x[:,i-1],dE((i-1)*dt)) , dE((i-0.5)*dt))    #rk2 predictor step
+                #guess = x[:,i-1] + dt*B2(x[:,i-1]+(dt/2)*B2(x[:,i-1],dE((i-1)*dt)) , dE((i-0.5)*dt))    #rk2 predictor step
                 guessk = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   #corrector step
                 err = np.linalg.norm(guess-guessk)
 
@@ -296,10 +303,10 @@ match to_run:
         match to_run2:
             
             case 'solution':
-                y_ee2, time = EE2(y0, 200)
-                y_cne = CN2(y0, 200)
-                y_cnfp = CN2fp(y0, 200, 1e-5)
-                y_cnnr = CN2nr(y0, 200, 1e-5)
+                y_ee2, time = EE2(y0, nd)
+                y_cne = CN2(y0, nd)
+                y_cnfp = CN2fp(y0, nd, 1e-5)
+                y_cnnr = CN2nr(y0, nd, 1e-5)
                 dt = time[1] - time[0]
                 
                 plt.figure()
