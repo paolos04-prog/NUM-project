@@ -10,12 +10,13 @@ R = 10  #resistance [ohm]
 C = 0.0025 #capacitance [F]
 L = 1   #inductance [H]
 
-approxdt = 0.05    #approximate time step to insert by hand
-nd = round(5/approxdt)  #nodes (int) corresponding to approxdt
+approxdt = 0.015   #approximate time step to insert by hand
+tM = 5      # maximum time of the simulation
+nd = round(tM/approxdt)  #nodes (int) corresponding to approxdt
 
 dE = lambda t: 0.2*np.sin(2.5*t)    #function of the derivative of the electrical field
 
-to_run = 'solution'     # string to chance to run different parts of the code: 
+to_run = 'consistency'     # string to chance to run different parts of the code: 
 # 'solution' compares different methods for solving the ivp problem
 # 'consistency' implements the consistency study
 # 'part2' to run the part of the code concerning the non-linear problem
@@ -38,7 +39,7 @@ def EE(x0, nodes):
     # nodes: number of points in which to evaluate i 
     # REMARK: for this method, the stability radius (easily also to calculate by hand) is dt = 0.025s, that corresponds to 200 nodes
 
-    time = np.linspace(0,5,nodes)   #vector of time
+    time = np.linspace(0,tM,nodes)   #vector of time
     dt = time[1]-time[0]    #increment step
     x = np.zeros((2, nodes))    #null vector containing two rows: [0] for i; [1] for i'
     x[:,0] = x0
@@ -52,7 +53,7 @@ def EE(x0, nodes):
 def RK2(x0, nodes):
     # nodes: number of points in which to evaluate i 
  
-    time = np.linspace(0,5,nodes)   #vector of time
+    time = np.linspace(0,tM,nodes)   #vector of time
     dt = time[1]-time[0]    #increment step
     x = np.zeros((2, nodes))    
     x[:,0] = x0
@@ -62,11 +63,36 @@ def RK2(x0, nodes):
     
     return x, crk
 
+def RK4(x0, nodes):
+    # nodes: number of points in which to evaluate i 
+ 
+    time = np.linspace(0,tM,nodes)   #vector of time
+    dt = time[1]-time[0]    #increment step
+    x = np.zeros((2, nodes))    
+    x[:,0] = x0
+    # use standard RK4: compute K1..K4
+    for i in range(1, nodes):
+        t_n = (i-1)*dt
+        K1 = A @ x[:,i-1] + B(dE(t_n))
+        K2 = A @ (x[:,i-1] + (dt/2)*K1) + B(dE(t_n + dt/2))
+        K3 = A @ (x[:,i-1] + (dt/2)*K2) + B(dE(t_n + dt/2))
+        K4 = A @ (x[:,i-1] + dt*K3) + B(dE(t_n + dt))
+        x[:,i] = x[:,i-1] + dt/6*(K1 + 2*K2 + 2*K3 + K4)
+    # to obtain the amplification matrix, we neglect the terms that arn't multiplying the unknown vector
+    # in other words, we study the homogenous case
+    K1_matrix = A
+    K2_matrix = A + 0.5*dt*A**2
+    K3_matrix = A + 0.5*dt*A**2 + 0.25*dt**2*A**3
+    K4_matrix = A + dt*A**2 + 0.5*dt**2*A**3 + 0.25*dt**3*A**4
+    crk4 = I2 + dt/6*(K1_matrix+2*K2_matrix+2*K3_matrix+K4_matrix)      #amplification matrix
+    #crk4 = I2 + dt*A + (dt*A)**2/2 + (dt*A)**3/6 + (dt*A)**4/24
+    return x, crk4
+
 ## CRANK-NICHOLSON
 def CN(x0, nodes):
     # nodes: number of points in which to evaluate i 
        
-    time = np.linspace(0,5,nodes)   #vector of time
+    time = np.linspace(0,tM,nodes)   #vector of time
     dt = time[1]-time[0]    #increment step
     x = np.zeros((2, nodes))    
     x[:,0] = x0
@@ -89,7 +115,7 @@ def CN(x0, nodes):
 def verlet(x0, nodes):
     # nodes: number of points in which to evaluate i 
        
-    time = np.linspace(0,5,nodes)   #vector of time
+    time = np.linspace(0,tM,nodes)   #vector of time
     dt = time[1]-time[0]    #increment step
     y = np.zeros(nodes)
     yprime = np.zeros(nodes)
@@ -109,6 +135,7 @@ match to_run:
     case 'solution':
         y_ee, C_ee, time = EE(y0,nd)       #200 is the number of nodes for which EE is stable, hence also all the other schemes are stable, since they have a stab radius greater than EE
         y_rk2, C_rks = RK2(y0,nd)
+        y_rk4, C_rks = RK4(y0,nd)
         y_cn, C_cn = CN(y0,nd)
         i_ver, ip_ver = verlet(y0, nd)
         dt = time[1]-time[0]
@@ -117,6 +144,7 @@ match to_run:
         plt.figure(figsize=(12,5))
         plt.plot(time, y_ee[0,:], 'b-', linewidth = 3, label = "EE")
         plt.plot(time, y_rk2[0,:], 'r--', linewidth = 2, label = "RK2")
+        plt.plot(time, y_rk4[0,:], 'm-', linewidth = 2, label = "RK4")
         plt.plot(time, y_cn[0,:], 'g-.', linewidth = 2, label = "CN")
         plt.plot(time, i_ver, 'y-', label = "Verlet")
         plt.legend(loc = 'best')
@@ -140,21 +168,24 @@ match to_run:
         ## ---------------------------------------------------------------------- ##
 
         # getting the reference solution
-        sol = CN(y0, 5000)
+        sol = CN(y0, 500000)
         ref_sol = sol[0][0,-1]
 
         nodes = np.linspace(2000,500,100)
         deltat = np.zeros(len(nodes))
         relerr_ee = np.zeros(len(deltat))
         relerr_rk2 = np.zeros(len(deltat))
+        relerr_rk4 = np.zeros(len(deltat))
         relerr_cn = np.zeros(len(deltat))
         relerr_ver = np.zeros(len(deltat))
 
         for i in range(0, len(deltat)):
-            deltat[i] = 5/int(nodes[i])
+            deltat[i] = tM/int(nodes[i])
 
             sol_EE = EE(y0, int(nodes[i]))
             relerr_ee[i] = np.abs((sol_EE[0][0,-1]-ref_sol)/ref_sol)
+            sol_rk4 = RK4(y0, int(nodes[i]))
+            relerr_rk4[i] = np.abs((sol_rk4[0][0,-1]-ref_sol)/ref_sol)
             sol_rk2 = RK2(y0, int(nodes[i]))
             relerr_rk2[i] = np.abs((sol_rk2[0][0,-1]-ref_sol)/ref_sol)
             sol_CN = CN(y0, int(nodes[i]))
@@ -166,6 +197,7 @@ match to_run:
 
         p_ee = np.polyfit(np.log(deltat),np.log(relerr_ee),1)
         p_rk2 = np.polyfit(np.log(deltat),np.log(relerr_rk2),1)
+        p_rk4 = np.polyfit(np.log(deltat),np.log(relerr_rk4),1)
         p_cn = np.polyfit(np.log(deltat),np.log(relerr_cn),1)
         p_ver = np.polyfit(np.log(deltat),np.log(relerr_ver),1)
 
@@ -174,6 +206,7 @@ match to_run:
         plt.figure(figsize=(12,5))
         plt.loglog(deltat, relerr_ee, 'b-', label = 'EE, p = '+str(p_ee[0]))
         plt.loglog(deltat, relerr_rk2, 'r-', label = 'RK2, p = '+str(p_rk2[0]))
+        plt.loglog(deltat, relerr_rk4, 'm-', label = 'RK4, p = '+str(p_rk4[0]))
         plt.loglog(deltat, relerr_cn, 'g-', label = 'CN, p = '+str(p_cn[0]))
         plt.loglog(deltat, relerr_ver, 'y-', label = 'VERLET, p = '+str(p_ver[0]))
 
@@ -194,18 +227,21 @@ match to_run:
 
         ## ---------------------------------------------------------------------- ##
 
-        to_run2 = 'solution'    #mathc-case for the second part. 'solution' to get the sol with different methods; 'consistency' to get the consistency study
+        to_run2 = 'consistency2'    #mathc-case for the second part. 
+        # 'solution2' to get the sol with different methods
+        # 'consistency2' to get the consistency study
         ## FULLY EXPLICIT - EXPLICIT EULER SCHEME
 
         def B2(x,F):    #function F(t,x(t)) for the new non-linear problem
             y = x[0]
+            #yround = np.sqrt(y**2 + 1e-7)
             yp = x[1]
             return np.array([yp, -2*1e4*(np.abs(y)*yp)- 400*y + F])
         
         def EE2(x0, nodes):
             # nodes: number of points in which to evaluate i 
        
-            time = np.linspace(0,5,nodes)   #vector of time
+            time = np.linspace(0,tM,nodes)   #vector of time
             dt = time[1]-time[0]    #increment step
             x = np.zeros((2, nodes))    
             x[:,0] = x0
@@ -215,13 +251,31 @@ match to_run:
 
             return x, time
         
+        def RK42(x0, nodes):
+            # nodes: number of points in which to evaluate i 
+    
+            time = np.linspace(0,tM,nodes)   #vector of time
+            dt = time[1]-time[0]    #increment step
+            x = np.zeros((2, nodes))    
+            x[:,0] = x0
+            # Computing K1..K4 for the nonlinear system
+            for i in range(1, nodes):
+                t_n = (i-1)*dt
+                K1 = B2(x[:,i-1], dE(t_n))
+                K2 = B2(x[:,i-1] + (dt/2)*K1, dE(t_n + dt/2))
+                K3 = B2(x[:,i-1] + (dt/2)*K2, dE(t_n + dt/2))
+                K4 = B2(x[:,i-1] + dt*K3, dE(t_n + dt))
+                x[:,i] = x[:,i-1] + dt/6*(K1 + 2*K2 + 2*K3 + K4)
+
+            return x
+
         #REMARK: Now we will implement the crank-nicolson scheme (implicit) with different strategies: 
         # explicit method initialization (EE/RK2) or fixed-point/NR iterations
         
         def CN2(x0, nodes):     
             # nodes: number of points in which to evaluate i 
        
-            time = np.linspace(0,5,nodes)   #vector of time
+            time = np.linspace(0,tM,nodes)   #vector of time
             dt = time[1]-time[0]    #increment step
             x = np.zeros((2, nodes))    
             x[:,0] = x0
@@ -236,7 +290,7 @@ match to_run:
         def CN2fp(x0, nodes, tol):    #fixed point iterations with while loop, tolerance
             # nodes: number of points in which to evaluate i 
        
-            time = np.linspace(0,5,nodes)   #vector of time
+            time = np.linspace(0,tM,nodes)   #vector of time
             dt = time[1]-time[0]    #increment step
             x = np.zeros((2, nodes))    
             x[:,0] = x0
@@ -266,7 +320,7 @@ match to_run:
         def CN2nr(x0, nodes, tol):    #newton raphson iterations with while loop, tolerance
             # nodes: number of points in which to evaluate i 
        
-            time = np.linspace(0,5,nodes)   #vector of time
+            time = np.linspace(0,tM,nodes)   #vector of time
             dt = time[1]-time[0]    #increment step
             x = np.zeros((2, nodes))    
             x[:,0] = x0
@@ -302,9 +356,10 @@ match to_run:
 
         match to_run2:
             
-            case 'solution':
+            case 'solution2':
                 y_ee2, time = EE2(y0, nd)
                 y_cne = CN2(y0, nd)
+                y_rk42 = RK42(y0, nd)
                 y_cnfp = CN2fp(y0, nd, 1e-5)
                 y_cnnr = CN2nr(y0, nd, 1e-5)
                 dt = time[1] - time[0]
@@ -312,66 +367,80 @@ match to_run:
                 plt.figure()
                 
                 #EE
-                plt.subplot(2,2,1)
+                plt.subplot(2,3,1)
                 plt.plot(time, y_ee2[0])
                 plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('Explicit Euler, (dt= ' +str(dt) + 's)'); plt.grid(True)
                 
                 #CN with EE guess
-                plt.subplot(2,2,2)
+                plt.subplot(2,3,2)
                 plt.plot(time, y_cne[0])
                 plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE guess, (dt=' +str(dt) + 's)'); plt.grid(True)
                 
                 #CN with EE initial guess, fixed point iterations
-                plt.subplot(2,2,3)
+                plt.subplot(2,3,3)
                 plt.plot(time, y_cnfp[0])
                 plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and FP iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
 
                 #CN with EE initial guess, newton raphson iterations
-                plt.subplot(2,2,4)
+                plt.subplot(2,3,4)
                 plt.plot(time, y_cnnr[0])
                 plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and NR iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
+
+                #RK4
+                plt.subplot(2,3,5)
+                plt.plot(time, y_rk42[0])
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('RK4, (dt=' +str(dt) + 's)'); plt.grid(True)
 
                 plt.show()
 
             case 'consistency2':
 
-                tolerance = 1e-5
-                ex_sol = CN2nr(y0, 50000, tolerance)[0][-1]     #getting the 'exact' solution
+                tolerance = 1e-14
+                #ex_sol = CN2nr(y0, 50000, tolerance)[0][-1]     #getting the 'exact' solution
+                ex_sol = RK42(y0, 50000)[0][-1]
                 deltastep = np.linspace(1000, 40000, 40)      #vector containing nodes starting from 1k nodes to 40k nodes
                 deltastept = np.zeros(len(deltastep))           #vector containing time steps deriving from the choosen nodes
                 rerr_ee = np.zeros(len(deltastep))
+                rerr_rk4 = np.zeros(len(deltastep))
                 rerr_cne = np.zeros(len(deltastep))
                 rerr_cnfp = np.zeros(len(deltastep))
                 rerr_cnnr = np.zeros(len(deltastep))
                 
                 def cons(x0, n, tol):
                     y_ee2 = EE2(x0, n)
+                    y_rk4 = RK42(x0, n)
                     y_cne = CN2(x0, n)
                     y_cnfp = CN2fp(x0, n, tol)
                     y_cnnr = CN2nr(x0, n, tol)
 
                     error_ee = np.abs((y_ee2[0][0,-1]-ex_sol)/ex_sol)
+                    error_rk4 = np.abs((y_rk4[0][-1]-ex_sol)/ex_sol)
                     error_cne = np.abs((y_cne[0][-1]-ex_sol)/ex_sol)
                     error_cnfp = np.abs((y_cnfp[0][-1]-ex_sol)/ex_sol)
                     error_cnnr = np.abs((y_cnnr[0][-1]-ex_sol)/ex_sol)
 
-                    return error_ee, error_cne, error_cnfp, error_cnnr
+                    return error_ee, error_rk4, error_cne, error_cnfp, error_cnnr
                 
                 for i in range(len(deltastep)):
-                    rerr_ee[i], rerr_cne[i], rerr_cnfp[i], rerr_cnnr[i] = cons(y0, int(deltastep[i]), tolerance)
-                    deltastept[i] = 5/deltastep[i]
+                    rerr_ee[i], rerr_rk4[i], rerr_cne[i], rerr_cnfp[i], rerr_cnnr[i] = cons(y0, int(deltastep[i]), tolerance)
+                    deltastept[i] = tM/deltastep[i]
                 
                 ## PLOTS
                 
                 # ORDER OF CONVERGENCE ESTIMATION
 
                 p_ee = np.polyfit(np.log(deltastept),np.log(rerr_ee),1)
+                p_rk4 = np.polyfit(np.log(deltastept),np.log(rerr_rk4),1)
                 p_cne = np.polyfit(np.log(deltastept),np.log(rerr_cne),1)
                 p_cnfp = np.polyfit(np.log(deltastept),np.log(rerr_cnfp),1)
                 p_cnnr = np.polyfit(np.log(deltastept),np.log(rerr_cnnr),1)
 
+                analrk4error = np.abs((np.log(rerr_rk4[-1])-np.log(rerr_rk4[-2]))/(np.log(deltastept[-1])-np.log(deltastept[-2])))
+                print(analrk4error)
+
                 plt.figure(figsize=(12,9))
                 plt.loglog(deltastept, rerr_ee, label = 'EE, p = ' + str(p_ee[0]))
+                plt.loglog(deltastept, rerr_rk4, label = 'RK4, p = ' + str(p_rk4[0]))
                 plt.loglog(deltastept, rerr_cne, label = 'CN with EE initial guess, p = ' + str(p_cne[0]))
                 plt.loglog(deltastept, rerr_cnfp, label = 'CN with EE initial guess, fp iterations, p = ' + str(p_cnfp[0]))
                 plt.loglog(deltastept, rerr_cnnr, label = 'CN with RK2 initial guess, nr iterations, p = ' + str(p_cnnr[0]))
