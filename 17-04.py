@@ -16,7 +16,7 @@ nd = round(tM/approxdt)  #nodes (int) corresponding to approxdt
 
 dE = lambda t: 0.2*np.sin(2.5*t)    #function of the derivative of the electrical field
 
-to_run = 'consistency'     # string to chance to run different parts of the code: 
+to_run = 'part2'     # string to chance to run different parts of the code: 
 # 'solution' compares different methods for solving the ivp problem
 # 'consistency' implements the consistency study
 # 'part2' to run the part of the code concerning the non-linear problem
@@ -147,6 +147,7 @@ match to_run:
         plt.plot(time, y_rk4[0,:], 'm-', linewidth = 2, label = "RK4")
         plt.plot(time, y_cn[0,:], 'g-.', linewidth = 2, label = "CN")
         plt.plot(time, i_ver, 'y-', label = "Verlet")
+        plt.axhline(0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)
         plt.legend(loc = 'best')
         plt.xlabel('t(s)')
         plt.ylabel('i(A)')
@@ -158,9 +159,8 @@ match to_run:
         ## ---------------------------------------------------------------------- ##
         ## CONSISTENCY STUDY
 
-        # In this part of the code a consistency study is developed
-        # To do the stability study, we evaluate the relative error
-        # In order to do that we consider the reference solution as the one obtained with the CN method (the most stable and precise) with a very small deltat (say with 1000 nodes ==- t=0.005s)
+        # In this part of the code a consistency study is developed, evaluating the relative error
+        # In order to do that we consider the reference solution as the one obtained with the CN method (the most stable and precise) with a very small dt (say with 1000 nodes ==- t=0.005s)
         # We will compare the current at 5s (i.e. the last value of the vector containing the currents)
         # Than we compare, for different time intervals, the norm of the relative errors. the time intervals will be taken from 0.005 to 0.02 s (in order to consider the EE stability radius)
         # Lastly we plot (on a log-log graph) the evolution of the error in function of the time interval. The slope of the line should be an approximation of the order of convergence (found with polyfit)
@@ -205,8 +205,8 @@ match to_run:
 
         plt.figure(figsize=(12,5))
         plt.loglog(deltat, relerr_ee, 'b-', label = 'EE, p = '+str(p_ee[0]))
-        plt.loglog(deltat, relerr_rk2, 'r-', label = 'RK2, p = '+str(p_rk2[0]))
-        plt.loglog(deltat, relerr_rk4, 'm-', label = 'RK4, p = '+str(p_rk4[0]))
+        #plt.loglog(deltat, relerr_rk2, 'r-', label = 'RK2, p = '+str(p_rk2[0]))
+        #plt.loglog(deltat, relerr_rk4, 'm-', label = 'RK4, p = '+str(p_rk4[0]))
         plt.loglog(deltat, relerr_cn, 'g-', label = 'CN, p = '+str(p_cn[0]))
         plt.loglog(deltat, relerr_ver, 'y-', label = 'VERLET, p = '+str(p_ver[0]))
 
@@ -234,9 +234,9 @@ match to_run:
 
         def B2(x,F):    #function F(t,x(t)) for the new non-linear problem
             y = x[0]
-            #yround = np.sqrt(y**2 + 1e-7)
+            yround = np.sqrt(y**2 + 1e-7)
             yp = x[1]
-            return np.array([yp, -2*1e4*(np.abs(y)*yp)- 400*y + F])
+            return np.array([yp, -2*1e4*(yround)*yp- 400*y + F])
         
         def EE2(x0, nodes):
             # nodes: number of points in which to evaluate i 
@@ -300,6 +300,7 @@ match to_run:
                 
                 n = 0
                 guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
+                #guess = x[:,i-1] + dt*B2(x[:,i-1]+(dt/2)*B2(x[:,i-1],dE((i-1)*dt)) , dE((i-0.5)*dt))    #rk2 predictor step
                 guessk = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   #corrector step
                 err = np.linalg.norm(guess-guessk)
 
@@ -363,39 +364,47 @@ match to_run:
                 y_cnfp = CN2fp(y0, nd, 1e-5)
                 y_cnnr = CN2nr(y0, nd, 1e-5)
                 dt = time[1] - time[0]
+                dtr = np.round(dt,8)
                 
-                plt.figure()
+                plt.figure(figsize=(15,10))
                 
                 #EE
                 plt.subplot(2,3,1)
                 plt.plot(time, y_ee2[0])
-                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('Explicit Euler, (dt= ' +str(dt) + 's)'); plt.grid(True)
+                plt.axhline(0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)      #to highlight i = 0A
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('Explicit Euler'); plt.grid(True)
                 
                 #CN with EE guess
                 plt.subplot(2,3,2)
                 plt.plot(time, y_cne[0])
-                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE guess, (dt=' +str(dt) + 's)'); plt.grid(True)
+                plt.axhline(0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)      
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE guess'); plt.grid(True)
                 
                 #CN with EE initial guess, fixed point iterations
                 plt.subplot(2,3,3)
                 plt.plot(time, y_cnfp[0])
-                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and FP iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
+                plt.axhline(0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and FP iterations'); plt.grid(True)
 
                 #CN with EE initial guess, newton raphson iterations
                 plt.subplot(2,3,4)
                 plt.plot(time, y_cnnr[0])
-                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and NR iterations, (dt=' +str(dt) + 's)'); plt.grid(True)
+                plt.axhline(0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and NR iterations'); plt.grid(True)
 
                 #RK4
                 plt.subplot(2,3,5)
                 plt.plot(time, y_rk42[0])
-                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('RK4, (dt=' +str(dt) + 's)'); plt.grid(True)
+                plt.axhline(0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('RK4'); plt.grid(True)
 
+                plt.suptitle('Comparison of Numerical Schemes for the non-linear problem, (dt =' + f"{dt:.4e}" + 's)', fontsize=14, fontweight='bold')
+                plt.tight_layout()
                 plt.show()
 
             case 'consistency2':
 
-                tolerance = 1e-14
+                tolerance = 1e-15
                 #ex_sol = CN2nr(y0, 50000, tolerance)[0][-1]     #getting the 'exact' solution
                 ex_sol = RK42(y0, 50000)[0][-1]
                 deltastep = np.linspace(1000, 40000, 40)      #vector containing nodes starting from 1k nodes to 40k nodes
@@ -429,18 +438,18 @@ match to_run:
                 
                 # ORDER OF CONVERGENCE ESTIMATION
 
+                # Find indices where RK4 error is clean (above the noise floor)
+                cleanrk4 = rerr_rk4 > 1e-13
+                
                 p_ee = np.polyfit(np.log(deltastept),np.log(rerr_ee),1)
-                p_rk4 = np.polyfit(np.log(deltastept),np.log(rerr_rk4),1)
+                p_rk4clean = np.polyfit(np.log(deltastept[cleanrk4]),np.log(rerr_rk4[cleanrk4]),1)
                 p_cne = np.polyfit(np.log(deltastept),np.log(rerr_cne),1)
                 p_cnfp = np.polyfit(np.log(deltastept),np.log(rerr_cnfp),1)
                 p_cnnr = np.polyfit(np.log(deltastept),np.log(rerr_cnnr),1)
 
-                analrk4error = np.abs((np.log(rerr_rk4[-1])-np.log(rerr_rk4[-2]))/(np.log(deltastept[-1])-np.log(deltastept[-2])))
-                print(analrk4error)
-
                 plt.figure(figsize=(12,9))
                 plt.loglog(deltastept, rerr_ee, label = 'EE, p = ' + str(p_ee[0]))
-                plt.loglog(deltastept, rerr_rk4, label = 'RK4, p = ' + str(p_rk4[0]))
+                plt.loglog(deltastept, rerr_rk4, label = 'RK4, p = ' + str(p_rk4clean[0]))
                 plt.loglog(deltastept, rerr_cne, label = 'CN with EE initial guess, p = ' + str(p_cne[0]))
                 plt.loglog(deltastept, rerr_cnfp, label = 'CN with EE initial guess, fp iterations, p = ' + str(p_cnfp[0]))
                 plt.loglog(deltastept, rerr_cnnr, label = 'CN with RK2 initial guess, nr iterations, p = ' + str(p_cnnr[0]))
