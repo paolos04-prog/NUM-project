@@ -12,12 +12,13 @@ L = 1   #inductance [H]
 
 approxdt = 0.015   #approximate time step to insert by hand
 tM = 5      # maximum time of the simulation
-nd = round(tM/approxdt)  #nodes (int) corresponding to approxdt
+nd = round(tM/approxdt) + 1  #nodes (int) corresponding to approxdt
 
 dE = lambda t: 0.2*np.sin(2.5*t)    #function of the derivative of the electrical field
 
-to_run = 'part2'     # string to chance to run different parts of the code: 
+to_run = 'solution'     # string to change to run different parts of the code: 
 # 'solution' compares different methods for solving the ivp problem
+# 'stability' implements the stability study
 # 'consistency' implements the consistency study
 # 'part2' to run the part of the code concerning the non-linear problem
 
@@ -63,7 +64,7 @@ def RK2(x0, nodes):
     
     return x, crk
 
-def RK4(x0, nodes):
+def RK4(x0,nodes):
     # nodes: number of points in which to evaluate i 
  
     time = np.linspace(0,tM,nodes)   #vector of time
@@ -81,10 +82,12 @@ def RK4(x0, nodes):
     # to obtain the amplification matrix, we neglect the terms that arn't multiplying the unknown vector
     # in other words, we study the homogenous case
     K1_matrix = A
-    K2_matrix = A + 0.5*dt*A**2
-    K3_matrix = A + 0.5*dt*A**2 + 0.25*dt**2*A**3
-    K4_matrix = A + dt*A**2 + 0.5*dt**2*A**3 + 0.25*dt**3*A**4
-    crk4 = I2 + dt/6*(K1_matrix+2*K2_matrix+2*K3_matrix+K4_matrix)      #amplification matrix
+    K2_matrix = A + 0.5 * dt * A @ A
+    K3_matrix = A + 0.5 * dt * A @ A + 0.25 * dt**2 * (A @ A @ A)
+    K4_matrix = A + dt * A @ A + 0.5 * dt**2 * (A @ A @ A) + 0.25 * dt**3 * (A @ A @ A @ A)
+
+   
+    crk4 = I2 + dt/6*(K1_matrix + 2*K2_matrix + 2*K3_matrix + K4_matrix)      #amplification matrix
     #crk4 = I2 + dt*A + (dt*A)**2/2 + (dt*A)**3/6 + (dt*A)**4/24
     return x, crk4
 
@@ -115,7 +118,7 @@ def CN(x0, nodes):
 def verlet(x0, nodes):
     # nodes: number of points in which to evaluate i 
        
-    time = np.linspace(0,tM,nodes)   #vector of time
+    time = np.linspace(0,5,nodes)   #vector of time
     dt = time[1]-time[0]    #increment step
     y = np.zeros(nodes)
     yprime = np.zeros(nodes)
@@ -127,8 +130,119 @@ def verlet(x0, nodes):
         b2 = B(dE(i*dt))    #function dependent on time evaluated at the next point
         y[i] = (1-200*(dt**2))*y[i-1] + dt*(1-5*dt)*yprime[i-1] + (dt**2/2)*b[1]
         yprime[i] = (((1-5*dt))*yprime[i-1] - 200*dt*y[i-1] + (dt/2)*b[1] - 200*dt*y[i] + (dt/2)*b2[1])/(1+5*dt)
+        #amplification matrix for the verlet method (Found using hand computation)
+        C_verlet = np.array([[1 - 200*dt**2, (1-5*dt)*dt], [-200*dt*(2-200*dt**2)/(1+5*dt), (1000*dt**3 - 200*dt**2 -5*dt + 1)/(1+5*dt)]])
 
-    return y, yprime
+    return y, yprime, C_verlet
+
+
+## ---------------------------------------------------------------------- ##
+## STUDY OF THE STABILITY
+
+# In this part of the code we sill study the stability of the different numerical scheme we implemented previously
+
+## ---------------------------------------------------------------------- ##
+##Compute the eigenvalues of the amplification matrix to check the stability
+def eigenvalues(ampli_matrix):
+    eigen_val, eigen_vect = np.linalg.eig(ampli_matrix)
+    return eigen_val, eigen_vect
+
+#Stability
+def stability(eig_val):
+    stable = True
+    additional_check = False
+    for eigenval in eig_val:
+        norm_eig_val = np.abs(eigenval)
+    
+        if norm_eig_val > 1:
+            stable = False
+        elif norm_eig_val == 1:
+            stable  = False
+            additional_check = True
+    return stable, additional_check
+
+def stable_text(eig_val):  
+    stable = True
+    additional_check = False
+    for eigenval in eig_val:
+        norm_eig_val = np.abs(eigenval)
+    
+        if norm_eig_val > 1:
+            stable = False
+        elif norm_eig_val == 1:
+            stable  = False
+            additional_check = True
+
+    if stable == True:
+        return " is stable"
+    elif stable == False and additional_check == False:
+        return " is unstable"
+    elif stable == False and additional_check == True:
+        return ", we cannot conclude on the stability because at least the absolute value of one eigenvalue is 1."
+        
+    #Be careful, if the eigenvalues is equal to 1, we need additional information
+
+#Compute the radius of stability of a method
+precision = 1000
+def radius_stability( method,x0, precision = precision):
+    """
+    INPUTS
+    Precision is an int, the default value is 1000
+
+    method is a string:
+        put EE, if the method used is euler explicite
+        put RK2, if the method used is Runge Kutta 2
+        put RK4, if the method used is Runge Kutta 4
+        put CN, if the method used is Crank Nicolson
+        put verlet, if the method used is Verlet
+    
+    x0 is an array with the initial conditions of the problem
+    """
+
+    stable = False
+    i = 2
+        
+    while stable == False and  i < precision + 1:
+        if method == "EE":
+            _, C_ee, time = EE(x0,i)
+            eigvalue = eigenvalues(C_ee)[0]
+            
+
+        elif method == "RK2":
+            _, C_rks = RK2(x0,i)
+            eigvalue = eigenvalues(C_rks)[0]
+
+        elif method == "RK4":
+            _, C_rks4 = RK4(x0,i)
+            eigvalue = eigenvalues(C_rks4)[0]
+            
+
+        elif method == "CN":
+            _, C_cn = CN(x0,i)
+            eigvalue = eigenvalues(C_cn)[0]
+
+        elif method == "verlet":
+            _, _ , C_verlet = verlet(x0,i)
+            eigvalue = eigenvalues(C_verlet)[0]
+            
+        else:
+            print("The method you entered is not valid, refer to the instructions for the possible methods")
+
+        stable, add_check = stability(eigvalue)
+        i += 1
+        
+    
+    time = np.linspace(0, tM, i - 1)
+    dt  =  time[1]-time[0]
+    if stable == True:
+        if i == 3:
+            print(f"The {method} method is unconditionally stable")
+        else:
+            print(f"The {method} method has a radius of convergence of {dt}")
+    elif stable == False and add_check == False:
+        print(f"The {method} method is unconditionally unstable for a time step of {dt}")
+    elif stable == False and add_check == True:
+        print(f"For the {method} method no radius of convergence was found, for a time step of {dt} and at least the absolute value of one eigenvalue is 1.")
 
 match to_run:
 
@@ -137,7 +251,7 @@ match to_run:
         y_rk2, C_rks = RK2(y0,nd)
         y_rk4, C_rks = RK4(y0,nd)
         y_cn, C_cn = CN(y0,nd)
-        i_ver, ip_ver = verlet(y0, nd)
+        i_ver, ip_ver, C_ver = verlet(y0, nd)
         dt = time[1]-time[0]
 
         ## PLOTS OF i WITH THE DIFFERENT METHODS ##
@@ -151,9 +265,45 @@ match to_run:
         plt.legend(loc = 'best')
         plt.xlabel('t(s)')
         plt.ylabel('i(A)')
-        plt.title('current with different methods for time step:' + str(dt) +'s')
+        plt.title('current with different methods for time step:' + f"{dt:.4e}" + 's')
         plt.grid(True)
         plt.show()
+
+    case 'stability':
+        nodes = nd
+        y_ee, C_ee, time = EE(y0,nodes)
+        y_rk2, C_rks = RK2(y0,nodes)
+        y_rk4, C_rks4 = RK4(y0,nodes)
+        y_cn, C_cn = CN(y0,nodes)
+        i_ver, ip_ver, C_verlet = verlet(y0, nodes)
+        dt = time[1]-time[0]
+
+        eigenvalue_ee = eigenvalues(C_ee)[0]
+        eigenvalue_rks = eigenvalues(C_rks)[0]
+        eigenvalue_rks4 = eigenvalues(C_rks4)[0]
+        eigenvalue_cn = eigenvalues(C_cn)[0]
+        eigenvalue_verlet = eigenvalues(C_verlet)[0]
+
+
+        stable_ee = stable_text(eigenvalue_ee)
+        stable_rks = stable_text(eigenvalue_rks)
+        stable_rks4 = stable_text(eigenvalue_rks4)
+        stable_cn = stable_text(eigenvalue_cn)
+        stable_verlet = stable_text(eigenvalue_verlet)
+
+
+        #check if the method is stable or not for a given time step dt and gives its radius of convergence
+        print(f"for a time step of" + f"{dt:.4e}" + "s:")
+        print(f"The Explicit Euler method{stable_ee}")
+        radius_stability("EE", y0)
+        print(f"The RK2 method{stable_rks}")
+        radius_stability("RK2", y0)
+        print(f"The RK4 method{stable_rks4}")
+        radius_stability("RK4", y0)
+        print(f"The Crank Nicolson method{stable_cn}")
+        radius_stability("CN", y0)
+        print(f"The verlet method{stable_verlet}")
+        radius_stability("verlet", y0)
 
     case 'consistency':
         ## ---------------------------------------------------------------------- ##
@@ -168,13 +318,13 @@ match to_run:
         ## ---------------------------------------------------------------------- ##
 
         # getting the reference solution
-        sol = CN(y0, 500000)
+        sol = CN(y0, 200000)
         ref_sol = sol[0][0,-1]
 
         nodes = np.linspace(2000,500,100)
         deltat = np.zeros(len(nodes))
         relerr_ee = np.zeros(len(deltat))
-        relerr_rk2 = np.zeros(len(deltat))
+        #relerr_rk2 = np.zeros(len(deltat))
         relerr_rk4 = np.zeros(len(deltat))
         relerr_cn = np.zeros(len(deltat))
         relerr_ver = np.zeros(len(deltat))
@@ -186,8 +336,8 @@ match to_run:
             relerr_ee[i] = np.abs((sol_EE[0][0,-1]-ref_sol)/ref_sol)
             sol_rk4 = RK4(y0, int(nodes[i]))
             relerr_rk4[i] = np.abs((sol_rk4[0][0,-1]-ref_sol)/ref_sol)
-            sol_rk2 = RK2(y0, int(nodes[i]))
-            relerr_rk2[i] = np.abs((sol_rk2[0][0,-1]-ref_sol)/ref_sol)
+            #sol_rk2 = RK2(y0, int(nodes[i]))
+            #relerr_rk2[i] = np.abs((sol_rk2[0][0,-1]-ref_sol)/ref_sol)
             sol_CN = CN(y0, int(nodes[i]))
             relerr_cn[i] = np.abs((sol_CN[0][0,-1]-ref_sol)/ref_sol)
             sol_ver = verlet(y0, int(nodes[i]))
@@ -196,7 +346,7 @@ match to_run:
         # ORDER OF CONVERGENCE ESTIMATION
 
         p_ee = np.polyfit(np.log(deltat),np.log(relerr_ee),1)
-        p_rk2 = np.polyfit(np.log(deltat),np.log(relerr_rk2),1)
+        #p_rk2 = np.polyfit(np.log(deltat),np.log(relerr_rk2),1)
         p_rk4 = np.polyfit(np.log(deltat),np.log(relerr_rk4),1)
         p_cn = np.polyfit(np.log(deltat),np.log(relerr_cn),1)
         p_ver = np.polyfit(np.log(deltat),np.log(relerr_ver),1)
@@ -206,7 +356,7 @@ match to_run:
         plt.figure(figsize=(12,5))
         plt.loglog(deltat, relerr_ee, 'b-', label = 'EE, p = '+str(p_ee[0]))
         #plt.loglog(deltat, relerr_rk2, 'r-', label = 'RK2, p = '+str(p_rk2[0]))
-        #plt.loglog(deltat, relerr_rk4, 'm-', label = 'RK4, p = '+str(p_rk4[0]))
+        plt.loglog(deltat, relerr_rk4, 'm-', label = 'RK4, p = '+str(p_rk4[0]))
         plt.loglog(deltat, relerr_cn, 'g-', label = 'CN, p = '+str(p_cn[0]))
         plt.loglog(deltat, relerr_ver, 'y-', label = 'VERLET, p = '+str(p_ver[0]))
 
@@ -405,9 +555,9 @@ match to_run:
             case 'consistency2':
 
                 tolerance = 1e-15
-                #ex_sol = CN2nr(y0, 50000, tolerance)[0][-1]     #getting the 'exact' solution
-                ex_sol = RK42(y0, 50000)[0][-1]
-                deltastep = np.linspace(1000, 40000, 40)      #vector containing nodes starting from 1k nodes to 40k nodes
+                #ex_sol = CN2nr(y0, 20000000, tolerance)[0][-1]     #getting the 'exact' solution
+                ex_sol = RK42(y0, 200000)[0][-1]
+                deltastep = np.linspace(1000, 15000, 15)      #vector containing nodes starting from 1k nodes to 40k nodes
                 deltastept = np.zeros(len(deltastep))           #vector containing time steps deriving from the choosen nodes
                 rerr_ee = np.zeros(len(deltastep))
                 rerr_rk4 = np.zeros(len(deltastep))
