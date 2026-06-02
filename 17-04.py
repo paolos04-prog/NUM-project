@@ -10,7 +10,7 @@ R = 10  #resistance [ohm]
 C = 0.0025 #capacitance [F]
 L = 1   #inductance [H]
 
-approxdt = 0.001   #approximate time step to insert by hand
+approxdt = 0.01   #approximate time step to insert by hand
 tM = 5      # maximum time of the simulation
 nd = round(tM/approxdt) + 1  #nodes (int) corresponding to approxdt
 
@@ -110,7 +110,7 @@ def CN(x0, nodes):
 ## ---------------------------------------------------------------------- ##
 ## NEWMARK RESOLUTION METHODS
 
-# In this part of the code some Newmark resolution methods will be applied to solve the problem
+# In this part of the code a Newmark resolution methods will be applied to solve the problem
 # A stability and consistency study will be conducted in order to evaluate which method fits better the problem
 
 ## ---------------------------------------------------------------------- ##
@@ -247,7 +247,7 @@ def radius_stability( method,x0, precision = precision):
 match to_run:
 
     case 'solution':
-        y_ee, C_ee, time = EE(y0,nd)       #200 is the number of nodes for which EE is stable, hence also all the other schemes are stable, since they have a stab radius greater than EE
+        y_ee, C_ee, time = EE(y0,nd)
         #y_rk2, C_rks = RK2(y0,nd)
         #y_rk4, C_rks = RK4(y0,nd)
         y_cn, C_cn = CN(y0,nd)
@@ -310,9 +310,9 @@ match to_run:
         ## CONSISTENCY STUDY
 
         # In this part of the code a consistency study is developed, evaluating the relative error
-        # In order to do that we consider the reference solution as the one obtained with the CN method (the most stable and precise) with a very small dt (say with 1000 nodes ==- t=0.005s)
+        # In order to do that we consider the reference solution as the one obtained with the CN method (the most stable and precise) with a very small dt (say with 200000 nodes ==- t=2.5*10^-5s)
         # We will compare the current at 5s (i.e. the last value of the vector containing the currents)
-        # Than we compare, for different time intervals, the norm of the relative errors. the time intervals will be taken from 0.005 to 0.02 s (in order to consider the EE stability radius)
+        # Than we compare, for different time intervals, the norm of the relative errors. the time intervals will be taken from 2.5*10^-3 to 0.01 s (in order to consider the EE stability radius)
         # Lastly we plot (on a log-log graph) the evolution of the error in function of the time interval. The slope of the line should be an approximation of the order of convergence (found with polyfit)
 
         ## ---------------------------------------------------------------------- ##
@@ -377,11 +377,12 @@ match to_run:
 
         ## ---------------------------------------------------------------------- ##
 
-        to_run2 = 'consistency2'    #mathc-case for the second part. 
+        to_run2 = 'solution2'    #mathc-case for the second part. 
         # 'solution2' to get the sol with different methods
         # 'consistency2' to get the consistency study
+        # 'unrealistic_sol' to get the solution in the unrealistica case given in the catalogue
 
-        eps = 1e-7
+        eps = 1e-8
         def B2(x,F):    #function F(t,x(t)) for the new non-linear problem
             y = x[0]
             yround = np.sqrt(y**2 + eps)
@@ -558,7 +559,7 @@ match to_run:
                 
                 #getting the 'exact' solution
                 ex_sol = RK42(y0, 200000)[0][-1]
-                deltastep = np.linspace(9000, 15000, 50)      #vector containing nodes starting from 1k nodes to 40k nodes
+                deltastep = np.linspace(10000, 15000, 15)      #vector containing nodes starting from 10k nodes to 15k nodes
                 deltastept = np.zeros(len(deltastep))           #vector containing time steps deriving from the choosen nodes
                 rerr_ee = np.zeros(len(deltastep))
                 rerr_rk4 = np.zeros(len(deltastep))
@@ -609,4 +610,78 @@ match to_run:
                 plt.ylabel('Relative error', fontweight = 'bold')
                 plt.title('Evolution of relative error with different methods')
                 plt.grid(True, which = 'both')
+                plt.show()
+
+            case 'unrealistic_sol':
+                def B2(x,F):    #function F(t,x(t)) for the new non-linear problem, in the unrealistic case
+                    y = x[0]
+                    yp = x[1]
+                    return np.array([yp, -2*1e4*y*yp- 400*y + F])
+                
+                def CN2unr(x0, nodes, tol):    #newton raphson iterations with while loop, tolerance
+                    # nodes: number of points in which to evaluate i 
+            
+                    time = np.linspace(0,tM,nodes)   #vector of time
+                    dt = time[1]-time[0]    #increment step
+                    x = np.zeros((2, nodes))    
+                    x[:,0] = x0
+                    nmax = 0
+
+                    for i in range(1, nodes):
+                        
+                        n = 0
+                        guess = x[:,i-1] + dt*B2(x[:,i-1], dE((i-1)*dt))    #EE predictor step
+                        #guess = x[:,i-1]
+                        #guess = x[:,i-1] + dt*B2(x[:,i-1]+(dt/2)*B2(x[:,i-1],dE((i-1)*dt)) , dE((i-0.5)*dt))    #rk2 predictor step
+                        guessk = x[:,i-1] + (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))   #corrector step
+                        err = np.linalg.norm(guess-guessk)
+
+                        while err > tol and n < 100:        #nr iterations
+                            guess = guessk
+                            G =  guess - x[:,i-1] - (dt/2)*(B2(x[:,i-1], dE((i-1)*dt)) + B2(guess, dE(i*dt)))      #cn function, of which is necessary to compute the jacobian
+                            ik = guess[0]   #current k
+                            ipk = guess[1]  #current' k
+                            jg = np.array([[1, -dt/2], [dt*1e4*ipk+200*dt, 1+dt*1e4*ik]])   #jacobian matrix (different from the previous case, since the initial equation is different)
+                            deltaguess = np.linalg.solve(jg, -G)    #guessk-guess
+                            guessk = guess + deltaguess     #find the new guessk
+                            err = np.linalg.norm(deltaguess)
+                            n = n+1
+                        
+                        x[:,i] = guessk
+
+                        if n > nmax:
+                            nmax = n
+                    
+                    print('newton raphson iterations with maximum number of iterations: ', nmax)
+                    return x
+                
+                y_ee2, time = EE2(y0, nd)
+                y_rk42 = RK42(y0, nd)
+                y_cnnru = CN2unr(y0, nd, 1e-5)
+
+                dt = time[1] - time[0]
+                dtr = np.round(dt,8)
+                
+                plt.figure(figsize=(15,10))
+                
+                #EE
+                plt.subplot(1,3,1)
+                plt.plot(time, y_ee2[0], 'b')
+                plt.axhline(0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)      #to highlight i = 0A
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('Explicit Euler'); plt.grid(True)
+
+                #CN with EE initial guess, newton raphson iterations
+                plt.subplot(1,3,2)
+                plt.plot(time, y_cnnru[0], 'g')
+                plt.axhline(0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('CN with EE initial guess and NR iterations'); plt.grid(True)
+
+                #RK4
+                plt.subplot(1,3,3)
+                plt.plot(time, y_rk42[0], 'y')
+                plt.axhline(0, color='black', linestyle='-', linewidth=1.2, alpha=0.7)
+                plt.xlabel('time (s)'); plt.ylabel('current (A)'); plt.title('RK4'); plt.grid(True)
+
+                plt.suptitle('Comparison of Numerical Schemes for the non-linear problem with unrealistic modeling, (dt =' + f"{dt:.4e}" + 's)', fontsize=14, fontweight='bold')
+                plt.tight_layout()
                 plt.show()
